@@ -28,6 +28,10 @@ dev = [
 snowflake = [
     "snowflake-connector-python>=3.6.0",
 ]
+dbt = [
+    "dbt-core>=1.7.0",
+    "dbt-snowflake>=1.7.0",
+]
 airflow = [
     "apache-airflow>=2.9.0",
 ]

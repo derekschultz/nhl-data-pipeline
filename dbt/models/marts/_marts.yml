@@ -1,0 +1,56 @@
+version: 2
+
+models:
+  - name: mart_player_season_stats
+    description: Aggregated skater statistics per player per season
+    columns:
+      - name: player_id
+        tests:
+          - not_null
+      - name: season_id
+        tests:
+          - not_null
+      - name: games_played
+        tests:
+          - not_null
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - player_id
+            - season_id
+
+  - name: mart_team_standings
+    description: Team win/loss/OTL records and points per season
+    columns:
+      - name: team_abbrev
+        tests:
+          - not_null
+      - name: season_id
+        tests:
+          - not_null
+      - name: points
+        tests:
+          - not_null
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - team_abbrev
+            - season_id
+
+  - name: mart_goalie_rankings
+    description: Aggregated goalie performance metrics per season
+    columns:
+      - name: player_id
+        tests:
+          - not_null
+      - name: season_id
+        tests:
+          - not_null
+      - name: games_played
+        tests:
+          - not_null
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - player_id
+            - season_id

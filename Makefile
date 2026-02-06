@@ -1,4 +1,4 @@
-.PHONY: install test lint typecheck pipeline pipeline-snowflake clean
+.PHONY: install test lint typecheck pipeline pipeline-snowflake clean dbt-run dbt-test dbt-docs
 
 install:
 	pip install -e ".[dev]"
@@ -21,3 +21,12 @@ pipeline-snowflake:
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete
+
+dbt-run:
+	cd dbt && dbt run
+
+dbt-test:
+	cd dbt && dbt test
+
+dbt-docs:
+	cd dbt && dbt docs generate && dbt docs serve

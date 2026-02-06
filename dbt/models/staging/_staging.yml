@@ -1,0 +1,60 @@
+version: 2
+
+models:
+  - name: stg_players
+    description: Staged player data with team details joined in
+    columns:
+      - name: player_id
+        description: Unique player identifier
+        tests:
+          - unique
+          - not_null
+      - name: position
+        description: Player position code
+        tests:
+          - accepted_values:
+              values: ['C', 'LW', 'RW', 'D', 'G']
+
+  - name: stg_games
+    description: Staged game results with computed winner/loser and goal differential
+    columns:
+      - name: game_id
+        description: Unique game identifier
+        tests:
+          - unique
+          - not_null
+      - name: goal_differential
+        description: Absolute difference in goals between teams
+
+  - name: stg_skater_stats
+    description: Per-game skater statistics with computed time on ice and rate stats
+    columns:
+      - name: player_id
+        tests:
+          - not_null
+      - name: game_id
+        tests:
+          - not_null
+      - name: toi_minutes
+        description: Time on ice in minutes
+      - name: points_per_60
+        description: Points per 60 minutes of ice time
+
+  - name: stg_goalie_stats
+    description: Per-game goalie statistics with quality start flag
+    columns:
+      - name: player_id
+        tests:
+          - not_null
+      - name: game_id
+        tests:
+          - not_null
+      - name: decision
+        description: Game decision for the goalie
+        tests:
+          - accepted_values:
+              values: ['W', 'L', 'O']
+              config:
+                where: "decision is not null"
+      - name: is_quality_start
+        description: Whether the start qualifies as a quality start (save_pct >= .920 and win)

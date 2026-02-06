@@ -7,16 +7,23 @@ Built as a hands-on companion to DataCamp's Data Engineering career track.
 ## Architecture
 
 ```
-NHL API ──→ Extract ──→ Transform ──→ Load ──→ PostgreSQL ──→ Dashboard
-                                                    ↑
-                                              Airflow (orchestration)
+NHL API ──→ Extract ──→ Transform ──→ Load ──→ PostgreSQL/Snowflake
+                                                       │
+                                                   dbt models
+                                                   (staging + marts)
+                                                       │
+                                                   Dashboard
+                                                       ↑
+                                                 Airflow (orchestration)
 ```
 
 **Extract:** Pull game stats, player data, standings, and schedules from the NHL public API.
 
 **Transform:** Clean, normalize, and calculate derived metrics (rolling averages, pace stats, shooting efficiency).
 
-**Load:** Upsert into a PostgreSQL data warehouse with a star schema design.
+**Load:** Upsert into a PostgreSQL or Snowflake data warehouse with a star schema design.
+
+**Model:** dbt staging views clean raw tables; mart tables aggregate into player season stats, team standings, and goalie rankings.
 
 **Orchestrate:** Airflow DAGs run nightly to ingest new game data.
 
@@ -25,9 +32,9 @@ NHL API ──→ Extract ──→ Transform ──→ Load ──→ PostgreSQ
 ## Tech Stack
 
 - **Language:** Python 3.11+
-- **Database:** PostgreSQL 16
+- **Database:** PostgreSQL 16 / Snowflake
 - **Orchestration:** Apache Airflow
-- **Transformations:** dbt (planned)
+- **Transformations:** dbt (dbt-core + dbt-snowflake)
 - **Containerization:** Docker / Docker Compose
 - **Dashboard:** Streamlit
 - **CI/CD:** GitHub Actions
@@ -43,6 +50,7 @@ nhl-data-pipeline/
 │   ├── load/            # PostgreSQL loader and table definitions
 │   ├── pipeline/        # Pipeline orchestration
 │   └── dashboard/       # Streamlit dashboard
+├── dbt/                 # dbt project (staging + mart models)
 ├── dags/                # Airflow DAGs
 ├── sql/                 # Database DDL and migrations
 ├── tests/               # Test suite
@@ -81,6 +89,21 @@ python -m src.pipeline.run
 streamlit run src/dashboard/app.py
 ```
 
+### Run dbt models
+
+```bash
+# Install dbt dependencies
+pip install -e ".[dbt]"
+cd dbt && dbt deps
+
+# Run all models (requires Snowflake env vars or --target postgres)
+dbt run
+dbt test
+
+# Generate and serve docs
+dbt docs generate && dbt docs serve
+```
+
 ## Database Schema
 
 Star schema design with two fact tables and four dimension tables:
@@ -93,6 +116,13 @@ Star schema design with two fact tables and four dimension tables:
 - `dim_season` — season metadata
 
 See `sql/schema.sql` for full DDL.
+
+### dbt Models
+
+dbt builds analytics on top of the raw star schema:
+
+- **Staging (views):** `stg_players`, `stg_games`, `stg_skater_stats`, `stg_goalie_stats` — cleaned and enriched versions of raw tables
+- **Marts (tables):** `mart_player_season_stats`, `mart_team_standings`, `mart_goalie_rankings` — aggregated analytics tables
 
 ## Development
 
