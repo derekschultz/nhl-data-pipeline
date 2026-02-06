@@ -1,0 +1,29 @@
+# Docker Compose for the full NHL Data Pipeline stack
+# TODO: Build out after DataCamp Professional DE track (Docker course)
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: nhl
+      POSTGRES_USER: nhl_pipeline
+      POSTGRES_PASSWORD: changeme  # Use .env in production
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./sql/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
+
+  # Uncomment after Airflow course:
+  # airflow:
+  #   image: apache/airflow:2.9.0
+  #   depends_on:
+  #     - postgres
+  #   volumes:
+  #     - ./dags:/opt/airflow/dags
+  #   ports:
+  #     - "8080:8080"
+
+volumes:
+  postgres_data:
