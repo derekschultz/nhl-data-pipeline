@@ -23,13 +23,13 @@ clean:
 	find . -type f -name "*.pyc" -delete
 
 dbt-run:
-	cd dbt && dbt run
+	cd dbt && dbt run --target postgres
 
 dbt-test:
-	cd dbt && dbt test
+	cd dbt && dbt test --target postgres
 
 dbt-docs:
-	cd dbt && dbt docs generate && dbt docs serve
+	cd dbt && dbt docs generate --target postgres && dbt docs serve --target postgres
 
 dashboard:
 	streamlit run src/dashboard/app.py

@@ -101,16 +101,16 @@ python -m src.pipeline.run
 ### Run dbt models
 
 ```bash
-# Install dbt dependencies
+# Install dbt dependencies (one-time)
 pip install -e ".[dbt]"
-cd dbt && dbt deps
+cd dbt && dbt deps && cd ..
 
-# Run all models (requires Snowflake env vars or --target postgres)
-dbt run
-dbt test
+# Run models and tests (targets Postgres by default)
+make dbt-run
+make dbt-test
 
 # Generate and serve docs
-dbt docs generate && dbt docs serve
+make dbt-docs
 ```
 
 ## Database Schema
