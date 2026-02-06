@@ -7,27 +7,27 @@ Built as a hands-on companion to DataCamp's Data Engineering career track.
 ## Architecture
 
 ```
-NHL API ──→ Extract ──→ Transform ──→ Load ──→ PostgreSQL/Snowflake
-                                                       │
-                                                   dbt models
-                                                   (staging + marts)
-                                                       │
-                                                   Dashboard
+NHL API ──→ Extract ──→ Transform ──→ Load ──→ PostgreSQL / Snowflake
+               │            │           │              │
+          httpx client   clean &     star           dbt staging
+          + retry        normalize   schema         + mart models
+                         + metrics                     │
+                                                 Streamlit Dashboard
                                                        ↑
                                                  Airflow (orchestration)
 ```
 
-**Extract:** Pull game stats, player data, standings, and schedules from the NHL public API.
+**Extract:** Pull game stats and boxscores from the NHL public API with automatic retries.
 
-**Transform:** Clean, normalize, and calculate derived metrics (rolling averages, pace stats, shooting efficiency).
+**Transform:** Clean player names, normalize team abbreviations, and calculate derived metrics.
 
-**Load:** Upsert into a PostgreSQL or Snowflake data warehouse with a star schema design.
+**Load:** Insert into a PostgreSQL or Snowflake star schema (dimension + fact tables).
 
-**Model:** dbt staging views clean raw tables; mart tables aggregate into player season stats, team standings, and goalie rankings.
+**Model:** dbt staging views enrich raw tables; mart tables aggregate into player season stats, team standings, and goalie rankings.
 
 **Orchestrate:** Airflow DAGs run nightly to ingest new game data.
 
-**Serve:** Streamlit dashboard for exploring league trends and team performance.
+**Serve:** Streamlit dashboard with progressive display — works with seed data alone, shows richer analytics as the pipeline and dbt populate the database.
 
 ## Tech Stack
 
