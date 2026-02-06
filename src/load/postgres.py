@@ -1,6 +1,7 @@
 """PostgreSQL data loader."""
 
 import logging
+import os
 
 import pandas as pd
 from sqlalchemy import create_engine, text
@@ -8,12 +9,20 @@ from sqlalchemy.engine import Engine
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_CONNECTION_STRING = "postgresql://localhost:5432/nhl"
+
+def _build_connection_string() -> str:
+    """Build a PostgreSQL connection string from environment variables."""
+    host = os.getenv("POSTGRES_HOST", "localhost")
+    port = os.getenv("POSTGRES_PORT", "5432")
+    db = os.getenv("POSTGRES_DB", "nhl")
+    user = os.getenv("POSTGRES_USER", "nhl")
+    password = os.getenv("POSTGRES_PASSWORD", "nhl")
+    return f"postgresql://{user}:{password}@{host}:{port}/{db}"
 
 
-def get_engine(connection_string: str = DEFAULT_CONNECTION_STRING) -> Engine:
+def get_engine(connection_string: str | None = None) -> Engine:
     """Create a SQLAlchemy engine."""
-    return create_engine(connection_string)
+    return create_engine(connection_string or _build_connection_string())
 
 
 def load_dataframe(

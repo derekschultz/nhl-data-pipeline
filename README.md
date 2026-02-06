@@ -76,6 +76,18 @@ source .venv/bin/activate
 pip install -e .
 ```
 
+### Start the database
+
+```bash
+docker compose up -d  # PostgreSQL 16 with schema + seed data (32 NHL teams)
+```
+
+### Launch the dashboard
+
+```bash
+make dashboard  # Works with seed data alone
+```
+
 ### Run the pipeline
 
 ```bash
@@ -84,24 +96,21 @@ python -m src.pipeline.run --extract
 
 # Run full ETL
 python -m src.pipeline.run
-
-# Launch the dashboard
-streamlit run src/dashboard/app.py
 ```
 
 ### Run dbt models
 
 ```bash
-# Install dbt dependencies
+# Install dbt dependencies (one-time)
 pip install -e ".[dbt]"
-cd dbt && dbt deps
+cd dbt && dbt deps && cd ..
 
-# Run all models (requires Snowflake env vars or --target postgres)
-dbt run
-dbt test
+# Run models and tests (targets Postgres by default)
+make dbt-run
+make dbt-test
 
 # Generate and serve docs
-dbt docs generate && dbt docs serve
+make dbt-docs
 ```
 
 ## Database Schema
