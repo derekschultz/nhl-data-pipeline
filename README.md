@@ -76,6 +76,18 @@ source .venv/bin/activate
 pip install -e .
 ```
 
+### Start the database
+
+```bash
+docker compose up -d  # PostgreSQL 16 with schema + seed data (32 NHL teams)
+```
+
+### Launch the dashboard
+
+```bash
+make dashboard  # Works with seed data alone
+```
+
 ### Run the pipeline
 
 ```bash
@@ -84,9 +96,6 @@ python -m src.pipeline.run --extract
 
 # Run full ETL
 python -m src.pipeline.run
-
-# Launch the dashboard (works with seed data alone)
-make dashboard
 ```
 
 ### Run dbt models
