@@ -1,0 +1,61 @@
+version: 2
+
+sources:
+  - name: nhl_raw
+    description: Raw NHL data loaded by the Python ETL pipeline
+    tables:
+      - name: dim_season
+        description: Season dimension table
+        columns:
+          - name: season_id
+            tests:
+              - unique
+              - not_null
+
+      - name: dim_team
+        description: Team dimension table
+        columns:
+          - name: team_abbrev
+            tests:
+              - unique
+              - not_null
+
+      - name: dim_player
+        description: Player dimension table
+        columns:
+          - name: player_id
+            tests:
+              - unique
+              - not_null
+
+      - name: dim_game
+        description: Game dimension table
+        loaded_at_field: game_date
+        freshness:
+          warn_after: {count: 2, period: day}
+          error_after: {count: 7, period: day}
+        columns:
+          - name: game_id
+            tests:
+              - unique
+              - not_null
+
+      - name: fact_game_skater_stats
+        description: Per-game skater statistics
+        columns:
+          - name: player_id
+            tests:
+              - not_null
+          - name: game_id
+            tests:
+              - not_null
+
+      - name: fact_game_goalie_stats
+        description: Per-game goalie statistics
+        columns:
+          - name: player_id
+            tests:
+              - not_null
+          - name: game_id
+            tests:
+              - not_null
