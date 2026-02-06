@@ -85,8 +85,8 @@ python -m src.pipeline.run --extract
 # Run full ETL
 python -m src.pipeline.run
 
-# Launch the dashboard
-streamlit run src/dashboard/app.py
+# Launch the dashboard (works with seed data alone)
+make dashboard
 ```
 
 ### Run dbt models

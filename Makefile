@@ -1,4 +1,4 @@
-.PHONY: install test lint typecheck pipeline pipeline-snowflake clean dbt-run dbt-test dbt-docs
+.PHONY: install test lint typecheck pipeline pipeline-snowflake clean dbt-run dbt-test dbt-docs dashboard
 
 install:
 	pip install -e ".[dev]"
@@ -30,3 +30,6 @@ dbt-test:
 
 dbt-docs:
 	cd dbt && dbt docs generate && dbt docs serve
+
+dashboard:
+	streamlit run src/dashboard/app.py
