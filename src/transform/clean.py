@@ -23,3 +23,19 @@ def normalize_player_name(name: str) -> str:
     name = " ".join(name.split())
 
     return name
+
+
+def toi_to_seconds(toi: str) -> int:
+    """Convert time-on-ice string 'MM:SS' to total seconds.
+
+    Examples:
+        >>> toi_to_seconds("18:45")
+        1125
+        >>> toi_to_seconds("0:00")
+        0
+    """
+    try:
+        parts = toi.split(":")
+        return int(parts[0]) * 60 + int(parts[1])
+    except (ValueError, IndexError):
+        return 0
