@@ -6,6 +6,7 @@ and displays richer analytics as ETL + dbt populate the database.
 Supports both Postgres and Snowflake backends via DB_BACKEND env var.
 """
 
+import logging
 import os
 from collections.abc import Callable
 
@@ -19,6 +20,8 @@ try:
     load_dotenv()
 except ImportError:
     pass
+
+logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="NHL Data Pipeline", layout="wide")
 
@@ -65,7 +68,8 @@ def safe_query(_engine: Engine, query: str) -> pd.DataFrame | None:
     """Execute a query and return a DataFrame, or None on error."""
     try:
         return pd.read_sql(text(query), _engine)
-    except Exception:
+    except Exception as exc:
+        logger.warning("Query failed: %s — %s", query[:120], exc)
         return None
 
 

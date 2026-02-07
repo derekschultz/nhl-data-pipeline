@@ -46,8 +46,12 @@ def load_dataframe(
     """
     from snowflake.connector.pandas_tools import write_pandas  # type: ignore[import-not-found]
 
+    # Snowflake expects uppercase column names to match DDL
+    df = df.copy()
+    df.columns = pd.Index([c.upper() for c in df.columns])
+
     success, _num_chunks, num_rows, _output = write_pandas(
-        conn, df, table_name.upper(), auto_create_table=True, overwrite=False,
+        conn, df, table_name.upper(), auto_create_table=False, overwrite=False,
     )
 
     if success:

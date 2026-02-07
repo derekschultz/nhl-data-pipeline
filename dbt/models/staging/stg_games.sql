@@ -32,4 +32,4 @@ select
     abs(g.home_score - g.away_score) as goal_differential
 from games g
 left join seasons s on g.season_id = s.season_id
-where g.game_state = 'FINAL'
+where g.game_state in ('OFF', 'FINAL')

@@ -19,7 +19,7 @@ pipeline:
 	python -m src.pipeline.run
 
 pipeline-snowflake:
-	DB_BACKEND=snowflake python -m src.pipeline.run
+	python -m src.pipeline.run --backend snowflake
 
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} +
@@ -35,10 +35,10 @@ dbt-docs:
 	cd dbt && dbt docs generate --target postgres && dbt docs serve --target postgres
 
 dbt-run-snowflake:
-	cd dbt && dbt run --target snowflake
+	set -a && . ./.env && set +a && cd dbt && dbt run --target snowflake
 
 dbt-test-snowflake:
-	cd dbt && dbt test --target snowflake
+	set -a && . ./.env && set +a && cd dbt && dbt test --target snowflake
 
 dashboard:
 	streamlit run src/dashboard/app.py
