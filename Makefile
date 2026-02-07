@@ -1,4 +1,4 @@
-.PHONY: install test lint typecheck pipeline pipeline-snowflake clean dbt-run dbt-test dbt-docs dashboard
+.PHONY: install test lint typecheck pipeline pipeline-snowflake clean dbt-run dbt-test dbt-docs dbt-run-snowflake dbt-test-snowflake dashboard dashboard-snowflake
 
 install:
 	pip install -e ".[dev]"
@@ -31,5 +31,14 @@ dbt-test:
 dbt-docs:
 	cd dbt && dbt docs generate --target postgres && dbt docs serve --target postgres
 
+dbt-run-snowflake:
+	cd dbt && dbt run --target snowflake
+
+dbt-test-snowflake:
+	cd dbt && dbt test --target snowflake
+
 dashboard:
 	streamlit run src/dashboard/app.py
+
+dashboard-snowflake:
+	DB_BACKEND=snowflake streamlit run src/dashboard/app.py

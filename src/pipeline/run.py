@@ -263,7 +263,7 @@ def _update_pipeline_run(
     rows_loaded: int = 0,
     error_message: str | None = None,
 ) -> None:
-    """Update pipeline_runs metadata table."""
+    """Update pipeline_runs metadata table (Postgres via SQLAlchemy)."""
     from sqlalchemy import text
     from sqlalchemy.engine import Engine
 
@@ -289,8 +289,57 @@ def _update_pipeline_run(
         conn.commit()
 
 
+def _create_pipeline_run_snowflake(game_date: date) -> int | None:
+    """Insert a new pipeline_runs record in Snowflake. Returns run_id or None."""
+    try:
+        from src.load.snowflake import get_connection
+
+        conn = get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "INSERT INTO pipeline_runs (run_date, status) VALUES (%s, 'running')",
+                (game_date,),
+            )
+            cur.execute("SELECT MAX(run_id) FROM pipeline_runs")
+            row = cur.fetchone()
+            run_id = int(row[0]) if row and row[0] is not None else None
+            return run_id
+        finally:
+            conn.close()
+    except Exception:
+        logger.debug("Could not create pipeline_runs record in Snowflake")
+        return None
+
+
+def _update_pipeline_run_snowflake(
+    run_id: int,
+    status: str,
+    rows_extracted: int = 0,
+    rows_loaded: int = 0,
+    error_message: str | None = None,
+) -> None:
+    """Update pipeline_runs metadata table in Snowflake."""
+    try:
+        from src.load.snowflake import get_connection
+
+        conn = get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE pipeline_runs SET completed_at = %s, status = %s, "
+                "rows_extracted = %s, rows_loaded = %s, error_message = %s "
+                "WHERE run_id = %s",
+                (datetime.now(), status, rows_extracted, rows_loaded, error_message, run_id),
+            )
+        finally:
+            conn.close()
+    except Exception:
+        logger.debug("Could not update pipeline_runs record in Snowflake")
+
+
 def _create_pipeline_run(game_date: date) -> int | None:
-    """Insert a new pipeline_runs record. Returns run_id or None if DB unavailable."""
+    """Insert a new pipeline_runs record (Postgres). Returns run_id or None."""
     try:
         from sqlalchemy import text
 
@@ -317,7 +366,11 @@ def run_pipeline(game_date: date, backend: str = "postgres") -> None:
     """Run the full ETL pipeline for a given date."""
     logger.info("Starting pipeline for %s (backend=%s)", game_date, backend)
 
-    run_id = _create_pipeline_run(game_date)
+    if backend == "snowflake":
+        run_id = _create_pipeline_run_snowflake(game_date)
+    else:
+        run_id = _create_pipeline_run(game_date)
+
     rows_extracted = 0
     rows_loaded = 0
 
@@ -327,22 +380,35 @@ def run_pipeline(game_date: date, backend: str = "postgres") -> None:
         rows_loaded = run_load(game_date, backend=backend)
 
         if run_id is not None:
-            from src.load.postgres import get_engine
-
-            _update_pipeline_run(
-                get_engine(), run_id, "success",
-                rows_extracted=rows_extracted, rows_loaded=rows_loaded,
-            )
-    except Exception:
-        if run_id is not None:
-            try:
+            if backend == "snowflake":
+                _update_pipeline_run_snowflake(
+                    run_id, "success",
+                    rows_extracted=rows_extracted, rows_loaded=rows_loaded,
+                )
+            else:
                 from src.load.postgres import get_engine
 
                 _update_pipeline_run(
-                    get_engine(), run_id, "failed",
-                    rows_extracted=rows_extracted,
-                    error_message=str(Exception),
+                    get_engine(), run_id, "success",
+                    rows_extracted=rows_extracted, rows_loaded=rows_loaded,
                 )
+    except Exception as e:
+        if run_id is not None:
+            try:
+                if backend == "snowflake":
+                    _update_pipeline_run_snowflake(
+                        run_id, "failed",
+                        rows_extracted=rows_extracted,
+                        error_message=str(e),
+                    )
+                else:
+                    from src.load.postgres import get_engine
+
+                    _update_pipeline_run(
+                        get_engine(), run_id, "failed",
+                        rows_extracted=rows_extracted,
+                        error_message=str(e),
+                    )
             except Exception:
                 pass
         raise

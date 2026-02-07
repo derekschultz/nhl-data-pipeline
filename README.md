@@ -113,6 +113,40 @@ make dbt-test
 make dbt-docs
 ```
 
+### Snowflake Setup
+
+To run the pipeline against Snowflake instead of Postgres:
+
+```bash
+# Install Snowflake dependencies
+pip install -e ".[snowflake,dbt]"
+```
+
+Set your Snowflake credentials in `.env` (see `.env.example`):
+
+```
+SNOWFLAKE_ACCOUNT=...
+SNOWFLAKE_USER=...
+SNOWFLAKE_PASSWORD=...
+SNOWFLAKE_DATABASE=NHL
+SNOWFLAKE_SCHEMA=PUBLIC
+SNOWFLAKE_WAREHOUSE=COMPUTE_WH
+SNOWFLAKE_ROLE=TRANSFORM
+```
+
+Run `sql/snowflake_schema.sql` and `sql/snowflake_seed.sql` in a Snowflake worksheet to create the schema and seed data.
+
+```bash
+# Run the ETL pipeline against Snowflake
+make pipeline-snowflake --date 2026-02-05
+
+# Run dbt models against Snowflake
+make dbt-run-snowflake
+
+# Launch the dashboard against Snowflake
+make dashboard-snowflake
+```
+
 ## Database Schema
 
 Star schema design with two fact tables and four dimension tables:

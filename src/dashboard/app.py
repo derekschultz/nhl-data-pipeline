@@ -2,9 +2,12 @@
 
 Works progressively: shows seed data (32 teams) immediately,
 and displays richer analytics as ETL + dbt populate the database.
+
+Supports both Postgres and Snowflake backends via DB_BACKEND env var.
 """
 
 import os
+from collections.abc import Callable
 
 import pandas as pd
 import streamlit as st
@@ -14,9 +17,27 @@ from sqlalchemy.engine import Engine
 st.set_page_config(page_title="NHL Data Pipeline", layout="wide")
 
 
+def _get_backend() -> str:
+    """Return the active database backend from env or session state."""
+    return os.getenv("DB_BACKEND", "postgres")
+
+
 @st.cache_resource
-def get_engine() -> Engine:
-    """Create a SQLAlchemy engine from environment variables."""
+def get_engine(backend: str) -> Engine:
+    """Create a SQLAlchemy engine for the given backend."""
+    if backend == "snowflake":
+        account = os.environ["SNOWFLAKE_ACCOUNT"]
+        user = os.environ["SNOWFLAKE_USER"]
+        password = os.environ["SNOWFLAKE_PASSWORD"]
+        database = os.getenv("SNOWFLAKE_DATABASE", "NHL")
+        schema = os.getenv("SNOWFLAKE_SCHEMA", "PUBLIC")
+        warehouse = os.getenv("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH")
+        role = os.getenv("SNOWFLAKE_ROLE", "TRANSFORM")
+        return create_engine(
+            f"snowflake://{user}:{password}@{account}/{database}/{schema}"
+            f"?warehouse={warehouse}&role={role}"
+        )
+
     host = os.getenv("POSTGRES_HOST", "localhost")
     port = os.getenv("POSTGRES_PORT", "5432")
     db = os.getenv("POSTGRES_DB", "nhl")
@@ -33,21 +54,28 @@ def safe_query(_engine: Engine, query: str) -> pd.DataFrame | None:
         return None
 
 
-def table_exists(_engine: Engine, table_name: str) -> bool:
-    """Check if a table or view exists in the public schema."""
+def table_exists(_engine: Engine, table_name: str, backend: str = "postgres") -> bool:
+    """Check if a table or view exists."""
+    if backend == "snowflake":
+        schema_name = "PUBLIC"
+        tbl = table_name.upper()
+    else:
+        schema_name = "public"
+        tbl = table_name
     df = safe_query(
         _engine,
         f"SELECT 1 FROM information_schema.tables "
-        f"WHERE table_schema = 'public' AND table_name = '{table_name}' LIMIT 1",
+        f"WHERE table_schema = '{schema_name}' AND table_name = '{tbl}' LIMIT 1",
     )
     return df is not None and len(df) > 0
 
 
-def row_count(_engine: Engine, table_name: str) -> int:
+def row_count(_engine: Engine, table_name: str, backend: str = "postgres") -> int:
     """Return row count for a table, or 0 if it doesn't exist."""
-    if not table_exists(_engine, table_name):
+    if not table_exists(_engine, table_name, backend):
         return 0
-    df = safe_query(_engine, f"SELECT COUNT(*) AS cnt FROM {table_name}")
+    tbl = table_name.upper() if backend == "snowflake" else table_name
+    df = safe_query(_engine, f"SELECT COUNT(*) AS cnt FROM {tbl}")
     if df is not None and len(df) > 0:
         return int(df["cnt"].iloc[0])
     return 0
@@ -58,7 +86,7 @@ def row_count(_engine: Engine, table_name: str) -> int:
 # ---------------------------------------------------------------------------
 
 
-def page_overview(_engine: Engine) -> None:
+def page_overview(_engine: Engine, backend: str) -> None:
     """Overview page with record counts and pipeline status."""
     st.header("Pipeline Overview")
 
@@ -66,7 +94,7 @@ def page_overview(_engine: Engine) -> None:
         "dim_season", "dim_team", "dim_player",
         "dim_game", "fact_game_skater_stats", "fact_game_goalie_stats",
     ]
-    counts = {t: row_count(_engine, t) for t in tables}
+    counts = {t: row_count(_engine, t, backend) for t in tables}
 
     cols = st.columns(len(tables))
     for col, table in zip(cols, tables):
@@ -76,14 +104,15 @@ def page_overview(_engine: Engine) -> None:
     has_game_data = counts["dim_game"] > 0
 
     if not has_game_data:
+        cmd = "make pipeline-snowflake" if backend == "snowflake" else "make pipeline"
         st.info(
             "Seed data loaded. Run the ETL pipeline to populate game and player data.\n\n"
-            "```bash\nmake pipeline\n```"
+            f"```bash\n{cmd}\n```"
         )
 
     # Pipeline runs
     st.subheader("Recent Pipeline Runs")
-    if table_exists(_engine, "pipeline_runs"):
+    if table_exists(_engine, "pipeline_runs", backend):
         runs = safe_query(
             _engine,
             "SELECT run_id, run_date, started_at, completed_at, status, "
@@ -102,18 +131,19 @@ def page_overview(_engine: Engine) -> None:
     marts = ["mart_team_standings", "mart_player_season_stats", "mart_goalie_rankings"]
     mart_cols = st.columns(len(marts))
     for col, mart in zip(mart_cols, marts):
-        exists = table_exists(_engine, mart)
+        exists = table_exists(_engine, mart, backend)
         label = mart.replace("mart_", "").replace("_", " ").title()
         col.metric(label, "Available" if exists else "Not built")
 
-    if not any(table_exists(_engine, m) for m in marts):
+    if not any(table_exists(_engine, m, backend) for m in marts):
+        cmd = "make dbt-run-snowflake" if backend == "snowflake" else "make dbt-run"
         st.info(
             "dbt marts have not been built yet. Run dbt to create analytics tables:\n\n"
-            "```bash\nmake dbt-run\n```"
+            f"```bash\n{cmd}\n```"
         )
 
 
-def page_teams(_engine: Engine) -> None:
+def page_teams(_engine: Engine, backend: str) -> None:
     """Teams page - works with seed data alone."""
     st.header("NHL Teams")
 
@@ -139,11 +169,11 @@ def page_teams(_engine: Engine) -> None:
                 col.markdown(f"- {row['team_abbrev']} — {row['full_name']}")
 
 
-def page_standings(_engine: Engine) -> None:
+def page_standings(_engine: Engine, backend: str) -> None:
     """Team standings from mart or fallback to raw game counts."""
     st.header("Team Standings")
 
-    if table_exists(_engine, "mart_team_standings"):
+    if table_exists(_engine, "mart_team_standings", backend):
         df = safe_query(
             _engine,
             "SELECT * FROM mart_team_standings ORDER BY points DESC",
@@ -153,10 +183,11 @@ def page_standings(_engine: Engine) -> None:
             return
 
     # Fallback: count games per team from dim_game
-    if row_count(_engine, "dim_game") == 0:
+    if row_count(_engine, "dim_game", backend) == 0:
+        cmd = "make pipeline-snowflake" if backend == "snowflake" else "make pipeline"
         st.info(
             "No game data available yet. Run the ETL pipeline to load games.\n\n"
-            "```bash\nmake pipeline\n```"
+            f"```bash\n{cmd}\n```"
         )
         return
 
@@ -177,15 +208,15 @@ def page_standings(_engine: Engine) -> None:
         st.dataframe(df, use_container_width=True, hide_index=True)
 
 
-def page_player_stats(_engine: Engine) -> None:
+def page_player_stats(_engine: Engine, backend: str) -> None:
     """Player stats from mart or fallback to raw aggregation."""
     st.header("Player Stats")
 
-    use_mart = table_exists(_engine, "mart_player_season_stats")
+    use_mart = table_exists(_engine, "mart_player_season_stats", backend)
 
     if use_mart:
         source_query = "SELECT * FROM mart_player_season_stats"
-    elif row_count(_engine, "fact_game_skater_stats") > 0:
+    elif row_count(_engine, "fact_game_skater_stats", backend) > 0:
         st.warning("dbt mart not built. Showing aggregated raw stats.")
         source_query = """
             SELECT p.player_id, p.first_name, p.last_name,
@@ -199,9 +230,10 @@ def page_player_stats(_engine: Engine) -> None:
             GROUP BY p.player_id, p.first_name, p.last_name, p.position, p.team_abbrev
         """
     else:
+        cmd = "make pipeline-snowflake" if backend == "snowflake" else "make pipeline"
         st.info(
             "No player stats available yet. Run the ETL pipeline to load game data.\n\n"
-            "```bash\nmake pipeline\n```"
+            f"```bash\n{cmd}\n```"
         )
         return
 
@@ -240,15 +272,15 @@ def page_player_stats(_engine: Engine) -> None:
     st.dataframe(filtered, use_container_width=True, hide_index=True)
 
 
-def page_goalie_rankings(_engine: Engine) -> None:
+def page_goalie_rankings(_engine: Engine, backend: str) -> None:
     """Goalie rankings from mart or fallback to raw aggregation."""
     st.header("Goalie Rankings")
 
-    use_mart = table_exists(_engine, "mart_goalie_rankings")
+    use_mart = table_exists(_engine, "mart_goalie_rankings", backend)
 
     if use_mart:
         source_query = "SELECT * FROM mart_goalie_rankings"
-    elif row_count(_engine, "fact_game_goalie_stats") > 0:
+    elif row_count(_engine, "fact_game_goalie_stats", backend) > 0:
         st.warning("dbt mart not built. Showing aggregated raw stats.")
         source_query = """
             SELECT p.player_id, p.first_name, p.last_name,
@@ -265,9 +297,10 @@ def page_goalie_rankings(_engine: Engine) -> None:
             GROUP BY p.player_id, p.first_name, p.last_name, p.team_abbrev
         """
     else:
+        cmd = "make pipeline-snowflake" if backend == "snowflake" else "make pipeline"
         st.info(
             "No goalie stats available yet. Run the ETL pipeline to load game data.\n\n"
-            "```bash\nmake pipeline\n```"
+            f"```bash\n{cmd}\n```"
         )
         return
 
@@ -304,7 +337,7 @@ def page_goalie_rankings(_engine: Engine) -> None:
 # Main
 # ---------------------------------------------------------------------------
 
-PAGES = {
+PAGES: dict[str, Callable[[Engine, str], None]] = {
     "Overview": page_overview,
     "Teams": page_teams,
     "Team Standings": page_standings,
@@ -317,22 +350,31 @@ def main() -> None:
     """Dashboard entry point."""
     st.title("NHL Data Pipeline Dashboard")
 
-    engine = get_engine()
+    backend = _get_backend()
+    st.sidebar.markdown(f"**Backend:** `{backend}`")
+
+    engine = get_engine(backend)
 
     # Connection test
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
     except Exception as exc:
-        st.error(
-            f"Cannot connect to PostgreSQL: {exc}\n\n"
-            "Make sure the database is running:\n\n"
-            "```bash\ndocker compose up -d\n```"
-        )
+        if backend == "snowflake":
+            hint = (
+                "Check your Snowflake environment variables "
+                "(SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_PASSWORD, etc.)."
+            )
+        else:
+            hint = (
+                "Make sure the database is running:\n\n"
+                "```bash\ndocker compose up -d\n```"
+            )
+        st.error(f"Cannot connect to {backend}: {exc}\n\n{hint}")
         st.stop()
 
     page = st.sidebar.radio("Navigation", list(PAGES.keys()))
-    PAGES[page](engine)
+    PAGES[page](engine, backend)
 
 
 main()

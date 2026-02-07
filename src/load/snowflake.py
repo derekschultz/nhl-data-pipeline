@@ -13,7 +13,8 @@ def get_connection() -> "snowflake.connector.SnowflakeConnection":  # type: igno
 
     Expected env vars:
         SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_PASSWORD,
-        SNOWFLAKE_DATABASE, SNOWFLAKE_SCHEMA, SNOWFLAKE_WAREHOUSE
+        SNOWFLAKE_DATABASE, SNOWFLAKE_SCHEMA, SNOWFLAKE_WAREHOUSE,
+        SNOWFLAKE_ROLE
     """
     import snowflake.connector  # type: ignore[import-not-found]
 
@@ -24,6 +25,7 @@ def get_connection() -> "snowflake.connector.SnowflakeConnection":  # type: igno
         database=os.environ.get("SNOWFLAKE_DATABASE", "NHL"),
         schema=os.environ.get("SNOWFLAKE_SCHEMA", "PUBLIC"),
         warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH"),
+        role=os.environ.get("SNOWFLAKE_ROLE", "TRANSFORM"),
     )
 
 
