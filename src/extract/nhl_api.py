@@ -44,7 +44,7 @@ class NHLAPIClient:
             try:
                 response = self.client.get(endpoint)
                 response.raise_for_status()
-                return response.json()
+                return dict(response.json())
             except (httpx.HTTPStatusError, httpx.TransportError) as e:
                 last_exception = e
                 wait = RETRY_BACKOFF_SECONDS * (2**attempt)

@@ -2,6 +2,7 @@
 
 import logging
 import os
+from typing import Literal
 
 import pandas as pd
 from sqlalchemy import create_engine, text
@@ -86,7 +87,7 @@ def load_dataframe(
     df: pd.DataFrame,
     table_name: str,
     engine: Engine,
-    if_exists: str = "append",
+    if_exists: Literal["fail", "replace", "append"] = "append",
 ) -> int:
     """Load a DataFrame into a PostgreSQL table.
 
@@ -117,4 +118,4 @@ def _count_rows(engine: Engine, table_name: str) -> int:
     """Count rows in a table."""
     with engine.connect() as conn:
         result = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}"))  # noqa: S608
-        return result.scalar_one()
+        return int(result.scalar_one())
