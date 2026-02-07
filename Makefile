@@ -1,7 +1,10 @@
-.PHONY: install test lint typecheck pipeline pipeline-snowflake clean dbt-run dbt-test dbt-docs dbt-run-snowflake dbt-test-snowflake dashboard dashboard-snowflake
+.PHONY: install install-snowflake test lint typecheck pipeline pipeline-snowflake clean dbt-run dbt-test dbt-docs dbt-run-snowflake dbt-test-snowflake dashboard dashboard-snowflake
 
 install:
 	pip install -e ".[dev]"
+
+install-snowflake:
+	pip install -e ".[dev,snowflake,dbt]"
 
 test:
 	pytest tests/ -v

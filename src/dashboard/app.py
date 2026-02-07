@@ -14,6 +14,12 @@ import streamlit as st
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 st.set_page_config(page_title="NHL Data Pipeline", layout="wide")
 
 
@@ -26,9 +32,18 @@ def _get_backend() -> str:
 def get_engine(backend: str) -> Engine:
     """Create a SQLAlchemy engine for the given backend."""
     if backend == "snowflake":
-        account = os.environ["SNOWFLAKE_ACCOUNT"]
-        user = os.environ["SNOWFLAKE_USER"]
-        password = os.environ["SNOWFLAKE_PASSWORD"]
+        account = os.getenv("SNOWFLAKE_ACCOUNT", "")
+        user = os.getenv("SNOWFLAKE_USER", "")
+        password = os.getenv("SNOWFLAKE_PASSWORD", "")
+        missing = [v for v in ("SNOWFLAKE_ACCOUNT", "SNOWFLAKE_USER", "SNOWFLAKE_PASSWORD")
+                   if not os.getenv(v)]
+        if missing:
+            st.error(
+                f"Missing required environment variables: {', '.join(missing)}\n\n"
+                "Set them in your `.env` file or environment before running "
+                "`make dashboard-snowflake`."
+            )
+            st.stop()
         database = os.getenv("SNOWFLAKE_DATABASE", "NHL")
         schema = os.getenv("SNOWFLAKE_SCHEMA", "PUBLIC")
         warehouse = os.getenv("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH")

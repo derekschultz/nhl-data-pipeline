@@ -119,7 +119,7 @@ To run the pipeline against Snowflake instead of Postgres:
 
 ```bash
 # Install Snowflake dependencies
-pip install -e ".[snowflake,dbt]"
+make install-snowflake
 ```
 
 Set your Snowflake credentials in `.env` (see `.env.example`):
