@@ -75,7 +75,7 @@ def _delete_existing(
         params = [val for pair in pairs for val in pair]
         cur.execute(f"DELETE FROM {upper_table} WHERE {conditions}", params)
 
-    deleted = cur.rowcount
+    deleted: int = cur.rowcount or 0
     if deleted:
         logger.info("Deleted %d existing rows from %s", deleted, upper_table)
     return deleted

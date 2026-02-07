@@ -1,5 +1,7 @@
 # NHL Data Pipeline
 
+[![CI](https://github.com/derekschultz/nhl-data-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/derekschultz/nhl-data-pipeline/actions/workflows/ci.yml)
+
 An end-to-end data engineering pipeline that ingests NHL game data from public APIs, transforms it into analytics-ready datasets, and serves it through a dashboard.
 
 Built as a hands-on companion to DataCamp's Data Engineering career track.
