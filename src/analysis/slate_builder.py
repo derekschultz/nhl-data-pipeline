@@ -102,13 +102,16 @@ def fetch_odds(
     return odds_list
 
 
-def fetch_shot_quality() -> dict[str, TeamShotQuality]:
+def fetch_shot_quality(last_n_games: int = 10) -> dict[str, TeamShotQuality]:
     """Fetch team shot quality from Natural Stat Trick.
+
+    Defaults to last 10 games — recent form is more relevant for DFS
+    than full-season averages.
 
     Returns dict keyed by BOTH team abbreviation and full team name
     for flexible matching with Odds API team names.
     """
-    quality = fetch_team_shot_quality()
+    quality = fetch_team_shot_quality(last_n_games=last_n_games)
 
     # Also add Odds API name mappings so the classifier can find teams
     extra_mappings: dict[str, TeamShotQuality] = {}

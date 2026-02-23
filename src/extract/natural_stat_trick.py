@@ -87,6 +87,7 @@ def _current_season() -> str:
 def fetch_team_shot_quality(
     season: str | None = None,
     situation: str = "5v5",
+    last_n_games: int | None = None,
     from_date: str = "",
     thru_date: str = "",
 ) -> dict[str, TeamShotQuality]:
@@ -94,15 +95,28 @@ def fetch_team_shot_quality(
 
     Args:
         season: Season string like '20252026'. Defaults to current season.
-        situation: Game situation filter ('5v5', 'all', 'pp', 'pk').
-        from_date: Start date filter 'YYYY-MM-DD' (empty = season start).
-        thru_date: End date filter 'YYYY-MM-DD' (empty = today).
+        situation: Game situation filter ('5v5', 'all', 'ev', 'pp', 'pk').
+        last_n_games: If set, fetch only the last N games per team (e.g., 10, 25).
+                      More relevant for DFS than full-season data.
+        from_date: Start date filter 'YYYY-MM-DD' (only when last_n_games is None).
+        thru_date: End date filter 'YYYY-MM-DD' (only when last_n_games is None).
 
     Returns:
         Dict of team abbreviation → TeamShotQuality.
     """
     if season is None:
         season = _current_season()
+
+    # Game filter: last N games or date range or full season
+    if last_n_games is not None:
+        gpfilt = "gpteam"
+        tgp = str(last_n_games)
+    elif from_date or thru_date:
+        gpfilt = "gpdate"
+        tgp = "82"
+    else:
+        gpfilt = "none"
+        tgp = "82"
 
     params = {
         "fromseason": season,
@@ -113,17 +127,21 @@ def fetch_team_shot_quality(
         "rate": "n",
         "team": "all",
         "loc": "B",
-        "gpf": "410",
+        "gpfilt": gpfilt,
+        "tgp": tgp,
         "fd": from_date,
         "td": thru_date,
     }
 
+    window_desc = (
+        f"last {last_n_games} games" if last_n_games
+        else f"{from_date or 'season start'} to {thru_date or 'today'}"
+    )
     logger.info(
-        "Fetching Natural Stat Trick team data: season=%s, sit=%s, dates=%s to %s",
+        "Fetching Natural Stat Trick team data: season=%s, sit=%s, window=%s",
         season,
         situation,
-        from_date or "season start",
-        thru_date or "today",
+        window_desc,
     )
 
     response = httpx.get(
