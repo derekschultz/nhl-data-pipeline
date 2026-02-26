@@ -68,7 +68,11 @@ def run_extract(game_date: date) -> int:
         all_players: list[dict] = []
 
         for game in completed_games:
-            boxscore = client.get_game_boxscore(game.game_id)
+            try:
+                boxscore = client.get_game_boxscore(game.game_id)
+            except Exception:
+                logger.warning("Skipping game %s: failed to fetch boxscore", game.game_id)
+                continue
 
             skaters = parse_skater_stats(boxscore, game.game_id)
             all_skaters.extend(asdict(s) for s in skaters)
