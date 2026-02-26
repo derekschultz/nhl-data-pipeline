@@ -8,6 +8,7 @@ import logging
 from datetime import datetime
 
 from src.analysis.game_environment import build_slate_breakdown
+from src.extract.daily_faceoff import fetch_lines_for_teams
 from src.extract.natural_stat_trick import (
     ODDS_API_NAME_TO_ABBREV,
     fetch_team_shot_quality,
@@ -58,7 +59,49 @@ def build_tonight_slate(
         len(slate.avoid_games),
     )
 
+    # 4. Fetch line combinations (optional — slate works without them)
+    _attach_line_combinations(slate)
+
     return slate
+
+
+def _attach_line_combinations(slate: SlateBreakdown) -> None:
+    """Fetch and attach DailyFaceoff line combinations to slate entries.
+
+    This is best-effort — if DailyFaceoff is down or a team fails,
+    the slate still works (lines are just None).
+    """
+    # Collect all unique team abbreviations from the slate
+    team_abbrevs: set[str] = set()
+    for game in slate.games:
+        for team_name in (game.home_team, game.away_team):
+            abbrev = _resolve_team_abbrev(team_name)
+            if abbrev:
+                team_abbrevs.add(abbrev)
+
+    if not team_abbrevs:
+        return
+
+    logger.info("Fetching line combinations for %d teams...", len(team_abbrevs))
+    try:
+        lines_by_team = fetch_lines_for_teams(sorted(team_abbrevs))
+    except Exception:
+        logger.warning("Failed to fetch line combinations", exc_info=True)
+        return
+
+    # Attach to slate entries
+    for game in slate.games:
+        home_abbrev = _resolve_team_abbrev(game.home_team)
+        away_abbrev = _resolve_team_abbrev(game.away_team)
+        if home_abbrev and home_abbrev in lines_by_team:
+            game.home_lines = lines_by_team[home_abbrev]
+        if away_abbrev and away_abbrev in lines_by_team:
+            game.away_lines = lines_by_team[away_abbrev]
+
+
+def _resolve_team_abbrev(team_name: str) -> str | None:
+    """Resolve an Odds API team name to a standard abbreviation."""
+    return ODDS_API_NAME_TO_ABBREV.get(team_name)
 
 
 def fetch_odds(

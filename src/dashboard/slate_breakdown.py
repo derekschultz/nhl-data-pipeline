@@ -13,7 +13,14 @@ import os
 
 import streamlit as st
 
-from src.models.slate import GameEnvironment, GameSlateEntry, SlateBreakdown
+from src.models.slate import (
+    GameEnvironment,
+    GameSlateEntry,
+    LineCombination,
+    PlayerLine,
+    SlateBreakdown,
+    TeamLines,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +55,10 @@ def render_slate_breakdown() -> None:
         "Pick the right games, then build correlated stacks within them.*"
     )
 
+    # Allow manual cache refresh
+    if st.button("Refresh slate data"):
+        _cached_build_slate.clear()
+
     api_key = os.environ.get("ODDS_API_KEY", "")
 
     if not api_key:
@@ -71,15 +82,21 @@ def render_slate_breakdown() -> None:
 
 
 def _fetch_live_slate(api_key: str) -> SlateBreakdown | None:
-    """Fetch live slate data. Cached for 15 minutes."""
+    """Fetch live slate data with a loading spinner."""
     try:
-        from src.analysis.slate_builder import build_tonight_slate
-        with st.spinner("Fetching odds and shot quality data..."):
-            return build_tonight_slate(odds_api_key=api_key)
+        with st.spinner("Fetching odds, shot quality, and line combinations..."):
+            return _cached_build_slate(api_key)
     except Exception as e:
         st.error(f"Failed to fetch slate data: {e}")
         logger.exception("Slate fetch failed")
         return None
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def _cached_build_slate(api_key: str) -> SlateBreakdown:
+    """Build tonight's slate. Cached for 15 minutes."""
+    from src.analysis.slate_builder import build_tonight_slate
+    return build_tonight_slate(odds_api_key=api_key)
 
 
 def _render_allocation_summary(slate: SlateBreakdown) -> None:
@@ -256,6 +273,10 @@ def _render_game_card(game: GameSlateEntry, border_color: str) -> None:
                 f"{_short_name(game.away_team)}: {away_str}"
             )
 
+    # Line combinations (if available)
+    if game.home_lines or game.away_lines:
+        _render_line_combinations(game)
+
     # Environment classification
     if game.environment_reason:
         st.info(f"**Analysis:** {game.environment_reason}")
@@ -286,8 +307,376 @@ def _format_ml(ml: int) -> str:
     return f"+{ml}" if ml > 0 else str(ml)
 
 
+def _render_line_combinations(game: GameSlateEntry) -> None:
+    """Render line combinations for both teams in a collapsible section."""
+    with st.expander("Line Combinations & Goalie Confirmations", expanded=True):
+        home_col, away_col = st.columns(2)
+
+        with home_col:
+            st.markdown(f"**{_short_name(game.home_team)} (Home)**")
+            if game.home_lines:
+                _render_team_lines(game.home_lines)
+            else:
+                st.caption("Line data unavailable")
+
+        with away_col:
+            st.markdown(f"**{_short_name(game.away_team)} (Away)**")
+            if game.away_lines:
+                _render_team_lines(game.away_lines)
+            else:
+                st.caption("Line data unavailable")
+
+
+def _render_team_lines(lines: TeamLines) -> None:
+    """Render a single team's line combinations."""
+    # Starting goalie (prominent)
+    if lines.starting_goalie:
+        goalie_text = _format_player(lines.starting_goalie)
+        st.markdown(f"**Starter:** {goalie_text}")
+    if lines.backup_goalie:
+        backup_text = _format_player(lines.backup_goalie)
+        st.caption(f"Backup: {backup_text}")
+
+    # Forward lines
+    if lines.forward_lines:
+        st.markdown("**Forwards**")
+        for combo in lines.forward_lines:
+            _render_combo_line(combo)
+
+    # Defense pairs
+    if lines.defense_pairs:
+        st.markdown("**Defense**")
+        for combo in lines.defense_pairs:
+            _render_combo_line(combo)
+
+    # Power play
+    if lines.power_play:
+        st.markdown("**Power Play**")
+        for combo in lines.power_play:
+            _render_combo_line(combo)
+
+    # Penalty kill
+    if lines.penalty_kill:
+        st.markdown("**Penalty Kill**")
+        for combo in lines.penalty_kill:
+            _render_combo_line(combo)
+
+
+def _render_combo_line(combo: LineCombination) -> None:
+    """Render a single line/pair/unit as a compact string."""
+    label = combo.group_id.upper()
+    players_str = " — ".join(_format_player(p) for p in combo.players)
+    st.caption(f"{label}: {players_str}")
+
+
+def _format_player(player: PlayerLine) -> str:
+    """Format a player name with injury/GTD markers."""
+    name = player.name
+    if player.injury_status == "out":
+        return f"~~{name}~~ (OUT)"
+    if player.injury_status == "dtd":
+        return f"{name} (DTD)"
+    if player.game_time_decision:
+        return f"{name} (GTD)"
+    return name
+
+
 def _demo_slate() -> SlateBreakdown:
     """Generate a demo slate for display when no API key is configured."""
+    # Sample line data for demo mode
+    col_lines = TeamLines(
+        team_abbrev="COL",
+        forward_lines=[
+            LineCombination(
+                group_type="ev", group_name="Forwards 1", group_id="f1",
+                players=[
+                    PlayerLine(name="Artturi Lehkonen", position="LW"),
+                    PlayerLine(name="Nathan MacKinnon", position="C"),
+                    PlayerLine(name="Mikko Rantanen", position="RW"),
+                ],
+            ),
+            LineCombination(
+                group_type="ev", group_name="Forwards 2", group_id="f2",
+                players=[
+                    PlayerLine(name="Ross Colton", position="LW"),
+                    PlayerLine(name="Casey Mittelstadt", position="C"),
+                    PlayerLine(name="Valeri Nichushkin", position="RW"),
+                ],
+            ),
+        ],
+        defense_pairs=[
+            LineCombination(
+                group_type="ev", group_name="Defense 1", group_id="d1",
+                players=[
+                    PlayerLine(name="Devon Toews", position="LD"),
+                    PlayerLine(name="Cale Makar", position="RD"),
+                ],
+            ),
+        ],
+        power_play=[
+            LineCombination(
+                group_type="pp", group_name="1st Powerplay Unit", group_id="pp1",
+                players=[
+                    PlayerLine(name="Artturi Lehkonen", position="LW"),
+                    PlayerLine(name="Nathan MacKinnon", position="C"),
+                    PlayerLine(name="Mikko Rantanen", position="RW"),
+                    PlayerLine(name="Cale Makar", position="RD"),
+                    PlayerLine(name="Devon Toews", position="LD"),
+                ],
+            ),
+        ],
+        starting_goalie=PlayerLine(name="Mackenzie Blackwood", position="G"),
+        backup_goalie=PlayerLine(name="Scott Wedgewood", position="G"),
+    )
+
+    edm_lines = TeamLines(
+        team_abbrev="EDM",
+        forward_lines=[
+            LineCombination(
+                group_type="ev", group_name="Forwards 1", group_id="f1",
+                players=[
+                    PlayerLine(name="Zach Hyman", position="LW"),
+                    PlayerLine(name="Connor McDavid", position="C"),
+                    PlayerLine(name="Leon Draisaitl", position="RW"),
+                ],
+            ),
+            LineCombination(
+                group_type="ev", group_name="Forwards 2", group_id="f2",
+                players=[
+                    PlayerLine(name="Ryan Nugent-Hopkins", position="LW"),
+                    PlayerLine(name="Adam Henrique", position="C"),
+                    PlayerLine(name="Viktor Arvidsson", position="RW"),
+                ],
+            ),
+        ],
+        defense_pairs=[
+            LineCombination(
+                group_type="ev", group_name="Defense 1", group_id="d1",
+                players=[
+                    PlayerLine(name="Mattias Ekholm", position="LD"),
+                    PlayerLine(name="Evan Bouchard", position="RD"),
+                ],
+            ),
+        ],
+        power_play=[
+            LineCombination(
+                group_type="pp", group_name="1st Powerplay Unit", group_id="pp1",
+                players=[
+                    PlayerLine(name="Zach Hyman", position="LW"),
+                    PlayerLine(name="Connor McDavid", position="C"),
+                    PlayerLine(name="Leon Draisaitl", position="RW"),
+                    PlayerLine(name="Evan Bouchard", position="RD"),
+                    PlayerLine(name="Ryan Nugent-Hopkins", position="LW"),
+                ],
+            ),
+        ],
+        penalty_kill=[
+            LineCombination(
+                group_type="pk", group_name="1st Penalty Kill Unit", group_id="pk1",
+                players=[
+                    PlayerLine(name="Connor McDavid", position="C"),
+                    PlayerLine(name="Zach Hyman", position="LW"),
+                    PlayerLine(name="Mattias Ekholm", position="LD"),
+                    PlayerLine(name="Evan Bouchard", position="RD"),
+                ],
+            ),
+        ],
+        starting_goalie=PlayerLine(name="Stuart Skinner", position="G"),
+        backup_goalie=PlayerLine(
+            name="Calvin Pickard", position="G", injury_status="dtd",
+        ),
+    )
+
+    car_lines = TeamLines(
+        team_abbrev="CAR",
+        forward_lines=[
+            LineCombination(
+                group_type="ev", group_name="Forwards 1", group_id="f1",
+                players=[
+                    PlayerLine(name="Seth Jarvis", position="LW"),
+                    PlayerLine(name="Sebastian Aho", position="C"),
+                    PlayerLine(name="Jack Roslovic", position="RW"),
+                ],
+            ),
+            LineCombination(
+                group_type="ev", group_name="Forwards 2", group_id="f2",
+                players=[
+                    PlayerLine(name="Andrei Svechnikov", position="LW"),
+                    PlayerLine(name="Jesperi Kotkaniemi", position="C"),
+                    PlayerLine(name="Martin Necas", position="RW"),
+                ],
+            ),
+        ],
+        defense_pairs=[
+            LineCombination(
+                group_type="ev", group_name="Defense 1", group_id="d1",
+                players=[
+                    PlayerLine(name="Jaccob Slavin", position="LD"),
+                    PlayerLine(name="Brent Burns", position="RD"),
+                ],
+            ),
+        ],
+        starting_goalie=PlayerLine(name="Frederik Andersen", position="G"),
+        backup_goalie=PlayerLine(name="Pyotr Kochetkov", position="G"),
+    )
+
+    phi_lines = TeamLines(
+        team_abbrev="PHI",
+        forward_lines=[
+            LineCombination(
+                group_type="ev", group_name="Forwards 1", group_id="f1",
+                players=[
+                    PlayerLine(name="Travis Konecny", position="LW"),
+                    PlayerLine(name="Sean Couturier", position="C"),
+                    PlayerLine(name="Matvei Michkov", position="RW"),
+                ],
+            ),
+        ],
+        defense_pairs=[
+            LineCombination(
+                group_type="ev", group_name="Defense 1", group_id="d1",
+                players=[
+                    PlayerLine(name="Travis Sanheim", position="LD"),
+                    PlayerLine(name="Cam York", position="RD"),
+                ],
+            ),
+        ],
+        starting_goalie=PlayerLine(name="Samuel Ersson", position="G"),
+        backup_goalie=PlayerLine(name="Ivan Fedotov", position="G"),
+    )
+
+    nsh_lines = TeamLines(
+        team_abbrev="NSH",
+        forward_lines=[
+            LineCombination(
+                group_type="ev", group_name="Forwards 1", group_id="f1",
+                players=[
+                    PlayerLine(name="Filip Forsberg", position="LW"),
+                    PlayerLine(name="Ryan O'Reilly", position="C"),
+                    PlayerLine(name="Gustav Nyquist", position="RW"),
+                ],
+            ),
+        ],
+        defense_pairs=[
+            LineCombination(
+                group_type="ev", group_name="Defense 1", group_id="d1",
+                players=[
+                    PlayerLine(name="Roman Josi", position="LD"),
+                    PlayerLine(name="Alexandre Carrier", position="RD"),
+                ],
+            ),
+        ],
+        starting_goalie=PlayerLine(name="Juuse Saros", position="G"),
+        backup_goalie=PlayerLine(name="Kevin Lankinen", position="G"),
+    )
+
+    chi_lines = TeamLines(
+        team_abbrev="CHI",
+        forward_lines=[
+            LineCombination(
+                group_type="ev", group_name="Forwards 1", group_id="f1",
+                players=[
+                    PlayerLine(name="Connor Bedard", position="LW"),
+                    PlayerLine(name="Philipp Kurashev", position="C"),
+                    PlayerLine(name="Teuvo Teravainen", position="RW"),
+                ],
+            ),
+        ],
+        defense_pairs=[
+            LineCombination(
+                group_type="ev", group_name="Defense 1", group_id="d1",
+                players=[
+                    PlayerLine(name="Alex Vlasic", position="LD"),
+                    PlayerLine(name="Connor Murphy", position="RD",
+                               injury_status="dtd"),
+                ],
+            ),
+        ],
+        starting_goalie=PlayerLine(name="Petr Mrazek", position="G"),
+        backup_goalie=PlayerLine(name="Arvid Soderblom", position="G"),
+    )
+
+    tor_lines = TeamLines(
+        team_abbrev="TOR",
+        forward_lines=[
+            LineCombination(
+                group_type="ev", group_name="Forwards 1", group_id="f1",
+                players=[
+                    PlayerLine(name="Matthew Knies", position="LW"),
+                    PlayerLine(name="Auston Matthews", position="C"),
+                    PlayerLine(name="Mitch Marner", position="RW"),
+                ],
+            ),
+            LineCombination(
+                group_type="ev", group_name="Forwards 2", group_id="f2",
+                players=[
+                    PlayerLine(name="Bobby McMann", position="LW"),
+                    PlayerLine(name="John Tavares", position="C"),
+                    PlayerLine(name="William Nylander", position="RW"),
+                ],
+            ),
+        ],
+        defense_pairs=[
+            LineCombination(
+                group_type="ev", group_name="Defense 1", group_id="d1",
+                players=[
+                    PlayerLine(name="Morgan Rielly", position="LD"),
+                    PlayerLine(name="Chris Tanev", position="RD"),
+                ],
+            ),
+        ],
+        power_play=[
+            LineCombination(
+                group_type="pp", group_name="1st Powerplay Unit", group_id="pp1",
+                players=[
+                    PlayerLine(name="Auston Matthews", position="C"),
+                    PlayerLine(name="Mitch Marner", position="RW"),
+                    PlayerLine(name="William Nylander", position="LW"),
+                    PlayerLine(name="John Tavares", position="C"),
+                    PlayerLine(name="Morgan Rielly", position="LD"),
+                ],
+            ),
+        ],
+        penalty_kill=[
+            LineCombination(
+                group_type="pk", group_name="1st Penalty Kill Unit", group_id="pk1",
+                players=[
+                    PlayerLine(name="Auston Matthews", position="C"),
+                    PlayerLine(name="Mitch Marner", position="RW"),
+                    PlayerLine(name="Chris Tanev", position="RD"),
+                    PlayerLine(name="Morgan Rielly", position="LD"),
+                ],
+            ),
+        ],
+        starting_goalie=PlayerLine(name="Joseph Woll", position="G"),
+        backup_goalie=PlayerLine(name="Anthony Stolarz", position="G"),
+    )
+
+    bos_lines = TeamLines(
+        team_abbrev="BOS",
+        forward_lines=[
+            LineCombination(
+                group_type="ev", group_name="Forwards 1", group_id="f1",
+                players=[
+                    PlayerLine(name="Brad Marchand", position="LW"),
+                    PlayerLine(name="Elias Lindholm", position="C"),
+                    PlayerLine(name="David Pastrnak", position="RW"),
+                ],
+            ),
+        ],
+        defense_pairs=[
+            LineCombination(
+                group_type="ev", group_name="Defense 1", group_id="d1",
+                players=[
+                    PlayerLine(name="Hampus Lindholm", position="LD"),
+                    PlayerLine(name="Charlie McAvoy", position="RD"),
+                ],
+            ),
+        ],
+        starting_goalie=PlayerLine(name="Jeremy Swayman", position="G"),
+        backup_goalie=PlayerLine(name="Joonas Korpisalo", position="G"),
+    )
+
     return SlateBreakdown(
         games=[
             GameSlateEntry(
@@ -315,6 +704,8 @@ def _demo_slate() -> SlateBreakdown:
                     "(home HDCF% 55.2, away HDCF% 53.8). "
                     "Expect high ownership — core game for the slate."
                 ),
+                home_lines=col_lines,
+                away_lines=edm_lines,
             ),
             GameSlateEntry(
                 home_team="Carolina Hurricanes",
@@ -347,6 +738,8 @@ def _demo_slate() -> SlateBreakdown:
                     "but only 44.2% HDCF — market overpricing offense; "
                     "Philadelphia Flyers: PDO at 102.3 — running hot, regression risk"
                 ),
+                home_lines=car_lines,
+                away_lines=phi_lines,
             ),
             GameSlateEntry(
                 home_team="Nashville Predators",
@@ -372,6 +765,8 @@ def _demo_slate() -> SlateBreakdown:
                     "Low total (5.0) with weak shot quality on both sides "
                     "(home HDCF% 48.1, away HDCF% 45.3). No edge."
                 ),
+                home_lines=nsh_lines,
+                away_lines=chi_lines,
             ),
             GameSlateEntry(
                 home_team="Toronto Maple Leafs",
@@ -397,6 +792,8 @@ def _demo_slate() -> SlateBreakdown:
                     "Low total (5.5) but home team has strong shot quality. "
                     "Low ownership = GPP upside."
                 ),
+                home_lines=tor_lines,
+                away_lines=bos_lines,
             ),
         ]
     )
