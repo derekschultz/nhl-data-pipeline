@@ -48,10 +48,14 @@ def run_extract(game_date: date) -> int:
 
     with NHLAPIClient() as client:
         scores = client.get_scores(game_date)
-        games = parse_games(scores)
+        all_games = parse_games(scores)
+
+        # Keep only regular-season and playoff games
+        SUPPORTED_GAME_TYPES = {2, 3}
+        games = [g for g in all_games if g.game_type in SUPPORTED_GAME_TYPES]
 
         if not games:
-            logger.info("No games found for %s", game_date)
+            logger.info("No supported games found for %s (%d total skipped)", game_date, len(all_games))
             return 0
 
         # Write games CSV
@@ -60,12 +64,8 @@ def run_extract(game_date: date) -> int:
         total_rows += len(games_df)
         logger.info("Wrote %d games to raw CSV", len(games_df))
 
-        # Fetch boxscores for completed regular-season/playoff games only
-        SUPPORTED_GAME_TYPES = {2, 3}  # regular season, playoffs
-        completed_games = [
-            g for g in games
-            if g.is_final and g.game_type in SUPPORTED_GAME_TYPES
-        ]
+        # Fetch boxscores for completed games only
+        completed_games = [g for g in games if g.is_final]
         logger.info(
             "%d of %d games are final regular-season/playoff, fetching boxscores",
             len(completed_games),
