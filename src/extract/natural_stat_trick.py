@@ -20,6 +20,7 @@ URL structure:
 
 import logging
 from datetime import date
+from io import StringIO
 
 import httpx
 import pandas as pd
@@ -61,7 +62,7 @@ TEAM_NAME_TO_ABBREV: dict[str, str] = {
     "St Louis Blues": "STL",
     "Tampa Bay Lightning": "TBL",
     "Toronto Maple Leafs": "TOR",
-    "Utah Hockey Club": "UTA",
+    "Utah Mammoth": "UTA",
     "Vancouver Canucks": "VAN",
     "Vegas Golden Knights": "VGK",
     "Winnipeg Jets": "WPG",
@@ -158,7 +159,7 @@ def fetch_team_shot_quality(
     response.raise_for_status()
 
     # Parse the HTML table with pandas
-    tables = pd.read_html(response.text)
+    tables = pd.read_html(StringIO(response.text))
     if not tables:
         logger.warning("No tables found on Natural Stat Trick page")
         return {}
