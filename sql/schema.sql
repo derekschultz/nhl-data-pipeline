@@ -65,6 +65,11 @@ CREATE TABLE IF NOT EXISTS fact_game_skater_stats (
     power_play_points   INTEGER DEFAULT 0,
     shorthanded_goals   INTEGER DEFAULT 0,
     faceoff_pct         REAL,
+    goals_rolling_10        REAL,
+    assists_rolling_10      REAL,
+    points_rolling_10       REAL,
+    shots_rolling_10        REAL,
+    toi_seconds_rolling_10  REAL,
     PRIMARY KEY (player_id, game_id)
 );
 
@@ -81,6 +86,8 @@ CREATE TABLE IF NOT EXISTS fact_game_goalie_stats (
     power_play_saves        INTEGER DEFAULT 0,
     shorthanded_saves       INTEGER DEFAULT 0,
     even_strength_saves     INTEGER DEFAULT 0,
+    save_pct_rolling_10     REAL,
+    goals_against_rolling_10 REAL,
     PRIMARY KEY (player_id, game_id)
 );
 

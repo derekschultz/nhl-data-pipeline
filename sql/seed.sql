@@ -28,7 +28,7 @@ INSERT INTO dim_team (team_abbrev, full_name, division, conference) VALUES
     ('STL', 'St. Louis Blues', 'Central', 'Western'),
     ('TBL', 'Tampa Bay Lightning', 'Atlantic', 'Eastern'),
     ('TOR', 'Toronto Maple Leafs', 'Atlantic', 'Eastern'),
-    ('UTA', 'Utah Hockey Club', 'Central', 'Western'),
+    ('UTA', 'Utah Mammoth', 'Central', 'Western'),
     ('VAN', 'Vancouver Canucks', 'Pacific', 'Western'),
     ('VGK', 'Vegas Golden Knights', 'Pacific', 'Western'),
     ('WPG', 'Winnipeg Jets', 'Central', 'Western'),

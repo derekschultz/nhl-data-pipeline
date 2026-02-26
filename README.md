@@ -96,8 +96,11 @@ make dashboard  # Works with seed data alone
 # Extract today's game data
 python -m src.pipeline.run --extract
 
-# Run full ETL
+# Run full ETL (extract → transform → load → enrich rolling averages)
 python -m src.pipeline.run
+
+# Re-compute rolling averages only (e.g., after backfilling historical data)
+python -m src.pipeline.run --enrich --date 2026-02-05
 ```
 
 ### Run dbt models
