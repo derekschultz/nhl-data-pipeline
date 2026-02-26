@@ -7,7 +7,7 @@ import logging
 from dataclasses import asdict
 from datetime import date, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
@@ -241,7 +241,7 @@ def _load_postgres(dataframes: dict[str, pd.DataFrame]) -> int:
     return total
 
 
-def _ensure_seasons_snowflake(conn: object, dataframes: dict[str, pd.DataFrame]) -> None:
+def _ensure_seasons_snowflake(conn: Any, dataframes: dict[str, pd.DataFrame]) -> None:
     """Auto-insert any missing seasons referenced by dim_game data (Snowflake)."""
     if "dim_game" not in dataframes:
         return

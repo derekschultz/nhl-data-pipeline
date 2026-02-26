@@ -1,8 +1,10 @@
 """PostgreSQL data loader."""
 
+from __future__ import annotations
+
 import logging
 import os
-from typing import Literal
+from typing import Any, Literal
 
 import pandas as pd
 from sqlalchemy import create_engine, text
@@ -72,8 +74,8 @@ def _upsert_dataframe(df: pd.DataFrame, table_name: str, engine: Engine) -> None
 
     # Convert NaN to None so psycopg2 sends NULL instead of float NaN.
     # Must cast to object first — pandas silently converts None back to NaN in numeric columns.
-    clean = df[all_cols].astype(object).where(df[all_cols].notna(), None)
-    records = clean.to_dict(orient="records")
+    clean = df[all_cols].astype(object).where(df[all_cols].notna(), other=None)  # type: ignore[arg-type]
+    records: list[dict[str, Any]] = clean.to_dict(orient="records")  # type: ignore[assignment]
     with engine.connect() as conn:
         conn.execute(text(sql), records)
         conn.commit()
