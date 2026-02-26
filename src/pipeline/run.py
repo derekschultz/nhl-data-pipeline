@@ -39,6 +39,11 @@ def run_extract(game_date: date) -> int:
     RAW_DIR.mkdir(parents=True, exist_ok=True)
 
     date_str = game_date.isoformat()
+
+    # Remove stale CSVs from prior runs so old data doesn't bleed through
+    for old_csv in RAW_DIR.glob(f"{date_str}_*.csv"):
+        old_csv.unlink()
+
     total_rows = 0
 
     with NHLAPIClient() as client:

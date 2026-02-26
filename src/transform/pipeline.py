@@ -27,6 +27,10 @@ def run_transforms(game_date: date) -> dict[str, pd.DataFrame]:
     date_str = game_date.isoformat()
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
 
+    # Remove stale processed CSVs from prior runs
+    for old_csv in PROCESSED_DIR.glob(f"{date_str}_*.csv"):
+        old_csv.unlink()
+
     result: dict[str, pd.DataFrame] = {}
 
     # Players
