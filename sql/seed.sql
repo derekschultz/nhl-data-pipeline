@@ -36,5 +36,10 @@ INSERT INTO dim_team (team_abbrev, full_name, division, conference) VALUES
 ON CONFLICT (team_abbrev) DO NOTHING;
 
 INSERT INTO dim_season (season_id, start_year, end_year, season_type) VALUES
+    ('20202021', 2020, 2021, 'regular'),
+    ('20212022', 2021, 2022, 'regular'),
+    ('20222023', 2022, 2023, 'regular'),
+    ('20232024', 2023, 2024, 'regular'),
+    ('20242025', 2024, 2025, 'regular'),
     ('20252026', 2025, 2026, 'regular')
 ON CONFLICT (season_id) DO NOTHING;

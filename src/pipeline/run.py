@@ -164,12 +164,47 @@ def run_load(game_date: date, backend: str = "postgres") -> int:
     return total_rows
 
 
+def _ensure_seasons_postgres(engine: "Engine", dataframes: dict[str, pd.DataFrame]) -> None:
+    """Auto-insert any missing seasons referenced by dim_game data."""
+    from sqlalchemy import text
+
+    if "dim_game" not in dataframes:
+        return
+
+    df = _prepare_for_table(dataframes["dim_game"], "dim_game")
+    if "season_id" not in df.columns:
+        return
+
+    season_ids = df["season_id"].dropna().unique().tolist()
+    if not season_ids:
+        return
+
+    with engine.connect() as conn:
+        for sid in season_ids:
+            sid_str = str(sid)
+            start_year = int(sid_str[:4])
+            end_year = int(sid_str[4:])
+            conn.execute(
+                text(
+                    "INSERT INTO dim_season (season_id, start_year, end_year, season_type) "
+                    "VALUES (:sid, :start, :end, 'regular') "
+                    "ON CONFLICT (season_id) DO NOTHING"
+                ),
+                {"sid": sid_str, "start": start_year, "end": end_year},
+            )
+        conn.commit()
+        logger.info("Ensured seasons exist: %s", season_ids)
+
+
 def _load_postgres(dataframes: dict[str, pd.DataFrame]) -> int:
     """Load DataFrames into PostgreSQL."""
     from src.load.postgres import get_engine, load_dataframe
 
     engine = get_engine()
     total = 0
+
+    # Ensure referenced seasons exist before loading games
+    _ensure_seasons_postgres(engine, dataframes)
 
     # Dimension tables first, then fact tables
     load_order = ["dim_player", "dim_game", "fact_game_skater_stats", "fact_game_goalie_stats"]
@@ -183,6 +218,35 @@ def _load_postgres(dataframes: dict[str, pd.DataFrame]) -> int:
     return total
 
 
+def _ensure_seasons_snowflake(conn: object, dataframes: dict[str, pd.DataFrame]) -> None:
+    """Auto-insert any missing seasons referenced by dim_game data (Snowflake)."""
+    if "dim_game" not in dataframes:
+        return
+
+    df = _prepare_for_table(dataframes["dim_game"], "dim_game")
+    if "season_id" not in df.columns:
+        return
+
+    season_ids = df["season_id"].dropna().unique().tolist()
+    if not season_ids:
+        return
+
+    cur = conn.cursor()
+    for sid in season_ids:
+        sid_str = str(sid)
+        start_year = int(sid_str[:4])
+        end_year = int(sid_str[4:])
+        cur.execute(
+            "MERGE INTO DIM_SEASON AS target "
+            "USING (SELECT %s AS SEASON_ID, %s AS START_YEAR, %s AS END_YEAR, 'regular' AS SEASON_TYPE) AS source "
+            "ON target.SEASON_ID = source.SEASON_ID "
+            "WHEN NOT MATCHED THEN INSERT (SEASON_ID, START_YEAR, END_YEAR, SEASON_TYPE) "
+            "VALUES (source.SEASON_ID, source.START_YEAR, source.END_YEAR, source.SEASON_TYPE)",
+            (sid_str, start_year, end_year),
+        )
+    logger.info("Ensured seasons exist in Snowflake: %s", season_ids)
+
+
 def _load_snowflake(dataframes: dict[str, pd.DataFrame]) -> int:
     """Load DataFrames into Snowflake."""
     from src.load.snowflake import get_connection, load_dataframe
@@ -191,6 +255,9 @@ def _load_snowflake(dataframes: dict[str, pd.DataFrame]) -> int:
     total = 0
 
     try:
+        # Ensure referenced seasons exist before loading games
+        _ensure_seasons_snowflake(conn, dataframes)
+
         load_order = [
             "dim_player",
             "dim_game",

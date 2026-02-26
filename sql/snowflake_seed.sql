@@ -46,10 +46,17 @@ WHEN NOT MATCHED THEN
     INSERT (team_abbrev, full_name, division, conference)
     VALUES (source.team_abbrev, source.full_name, source.division, source.conference);
 
--- Seed season
+-- Seed seasons (historical + current)
 MERGE INTO dim_season AS target
 USING (
-    SELECT '20252026' AS season_id, 2025 AS start_year, 2026 AS end_year, 'regular' AS season_type
+    SELECT column1 AS season_id, column2 AS start_year, column3 AS end_year, column4 AS season_type
+    FROM VALUES
+        ('20202021', 2020, 2021, 'regular'),
+        ('20212022', 2021, 2022, 'regular'),
+        ('20222023', 2022, 2023, 'regular'),
+        ('20232024', 2023, 2024, 'regular'),
+        ('20242025', 2024, 2025, 'regular'),
+        ('20252026', 2025, 2026, 'regular')
 ) AS source
 ON target.season_id = source.season_id
 WHEN NOT MATCHED THEN
