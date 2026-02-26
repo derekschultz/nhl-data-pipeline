@@ -470,6 +470,9 @@ def run_pipeline(game_date: date, backend: str = "postgres") -> None:
         run_transform(game_date)
         rows_loaded = run_load(game_date, backend=backend)
 
+        from src.pipeline.enrich import run_enrich
+        run_enrich(game_date, backend=backend)
+
         if run_id is not None:
             if backend == "snowflake":
                 _update_pipeline_run_snowflake(
@@ -530,6 +533,7 @@ if __name__ == "__main__":
     parser.add_argument("--extract", action="store_true", help="Run extract only")
     parser.add_argument("--transform", action="store_true", help="Run transform only")
     parser.add_argument("--load", action="store_true", help="Run load only")
+    parser.add_argument("--enrich", action="store_true", help="Run enrichment only")
     parser.add_argument(
         "--backend",
         choices=["postgres", "snowflake"],
@@ -555,5 +559,8 @@ if __name__ == "__main__":
             run_transform(game_date)
         elif args.load:
             run_load(game_date, backend=args.backend)
+        elif args.enrich:
+            from src.pipeline.enrich import run_enrich
+            run_enrich(game_date, backend=args.backend)
         else:
             run_pipeline(game_date, backend=args.backend)
