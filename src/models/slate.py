@@ -9,6 +9,39 @@ from datetime import datetime
 from enum import StrEnum
 
 
+@dataclass
+class PlayerLine:
+    """A player's slot within a line combination."""
+
+    name: str
+    position: str  # LW, C, RW, LD, RD, G
+    injury_status: str | None = None  # "out", "dtd", None
+    game_time_decision: bool = False
+
+
+@dataclass
+class LineCombination:
+    """A single line/unit grouping (e.g., Forward Line 1, PP1)."""
+
+    group_type: str  # "ev", "pp", "pk"
+    group_name: str  # "Forwards 1", "1st Powerplay Unit", etc.
+    group_id: str  # "f1", "d1", "pp1", "pk1", "g"
+    players: list[PlayerLine] = field(default_factory=list)
+
+
+@dataclass
+class TeamLines:
+    """Full line combination data for a single team."""
+
+    team_abbrev: str
+    forward_lines: list[LineCombination] = field(default_factory=list)  # f1-f4
+    defense_pairs: list[LineCombination] = field(default_factory=list)  # d1-d3
+    power_play: list[LineCombination] = field(default_factory=list)  # pp1-pp2
+    penalty_kill: list[LineCombination] = field(default_factory=list)  # pk1-pk2
+    starting_goalie: PlayerLine | None = None
+    backup_goalie: PlayerLine | None = None
+
+
 class GameEnvironment(StrEnum):
     """Game environment tier for DFS entry allocation.
 
@@ -113,6 +146,10 @@ class GameSlateEntry:
     # Flags
     divergence_flag: bool = False
     divergence_detail: str = ""
+
+    # Line combinations (from DailyFaceoff)
+    home_lines: TeamLines | None = None
+    away_lines: TeamLines | None = None
 
     @property
     def matchup(self) -> str:

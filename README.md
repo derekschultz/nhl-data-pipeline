@@ -19,7 +19,7 @@ NHL API ──→ Extract ──→ Transform ──→ Load ──→ PostgreSQ
                                                  Airflow (orchestration)
 ```
 
-**Extract:** Pull game stats and boxscores from the NHL public API with automatic retries.
+**Extract:** Pull game stats and boxscores from the NHL public API with automatic retries. Scrape team shot quality from Natural Stat Trick, line combinations and goalie confirmations from DailyFaceoff, and live odds from The Odds API.
 
 **Transform:** Clean player names, normalize team abbreviations, and calculate derived metrics.
 
@@ -47,7 +47,7 @@ NHL API ──→ Extract ──→ Transform ──→ Load ──→ PostgreSQ
 nhl-data-pipeline/
 ├── src/
 │   ├── models/          # Data models (Player, Team, Game, Stats)
-│   ├── extract/         # NHL API client and data extractors
+│   ├── extract/         # NHL API, DailyFaceoff, NST, and Odds API extractors
 │   ├── transform/       # Cleaning, normalization, derived metrics
 │   ├── load/            # PostgreSQL loader and table definitions
 │   ├── pipeline/        # Pipeline orchestration
