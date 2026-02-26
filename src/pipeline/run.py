@@ -1,12 +1,18 @@
 """Main pipeline runner. Ties together extract, transform, and load stages."""
 
+from __future__ import annotations
+
 import argparse
 import logging
 from dataclasses import asdict
 from datetime import date, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
+
+if TYPE_CHECKING:
+    from sqlalchemy.engine import Engine
 
 logging.basicConfig(
     level=logging.INFO,
@@ -39,14 +45,27 @@ def run_extract(game_date: date) -> int:
     RAW_DIR.mkdir(parents=True, exist_ok=True)
 
     date_str = game_date.isoformat()
+
+    # Remove stale CSVs from prior runs so old data doesn't bleed through
+    for old_csv in RAW_DIR.glob(f"{date_str}_*.csv"):
+        old_csv.unlink()
+
     total_rows = 0
 
     with NHLAPIClient() as client:
         scores = client.get_scores(game_date)
-        games = parse_games(scores)
+        all_games = parse_games(scores)
+
+        # Keep only regular-season and playoff games
+        supported_game_types = {2, 3}
+        games = [g for g in all_games if g.game_type in supported_game_types]
 
         if not games:
-            logger.info("No games found for %s", game_date)
+            skipped = len(all_games)
+            logger.info(
+                "No supported games found for %s (%d total skipped)",
+                game_date, skipped,
+            )
             return 0
 
         # Write games CSV
@@ -58,7 +77,7 @@ def run_extract(game_date: date) -> int:
         # Fetch boxscores for completed games only
         completed_games = [g for g in games if g.is_final]
         logger.info(
-            "%d of %d games are final, fetching boxscores",
+            "%d of %d games are final regular-season/playoff, fetching boxscores",
             len(completed_games),
             len(games),
         )
@@ -68,7 +87,11 @@ def run_extract(game_date: date) -> int:
         all_players: list[dict] = []
 
         for game in completed_games:
-            boxscore = client.get_game_boxscore(game.game_id)
+            try:
+                boxscore = client.get_game_boxscore(game.game_id)
+            except Exception:
+                logger.warning("Skipping game %s: failed to fetch boxscore", game.game_id)
+                continue
 
             skaters = parse_skater_stats(boxscore, game.game_id)
             all_skaters.extend(asdict(s) for s in skaters)
@@ -164,12 +187,47 @@ def run_load(game_date: date, backend: str = "postgres") -> int:
     return total_rows
 
 
+def _ensure_seasons_postgres(engine: Engine, dataframes: dict[str, pd.DataFrame]) -> None:
+    """Auto-insert any missing seasons referenced by dim_game data."""
+    from sqlalchemy import text
+
+    if "dim_game" not in dataframes:
+        return
+
+    df = _prepare_for_table(dataframes["dim_game"], "dim_game")
+    if "season_id" not in df.columns:
+        return
+
+    season_ids = df["season_id"].dropna().unique().tolist()
+    if not season_ids:
+        return
+
+    with engine.connect() as conn:
+        for sid in season_ids:
+            sid_str = str(sid)
+            start_year = int(sid_str[:4])
+            end_year = int(sid_str[4:])
+            conn.execute(
+                text(
+                    "INSERT INTO dim_season (season_id, start_year, end_year, season_type) "
+                    "VALUES (:sid, :start, :end, 'regular') "
+                    "ON CONFLICT (season_id) DO NOTHING"
+                ),
+                {"sid": sid_str, "start": start_year, "end": end_year},
+            )
+        conn.commit()
+        logger.info("Ensured seasons exist: %s", season_ids)
+
+
 def _load_postgres(dataframes: dict[str, pd.DataFrame]) -> int:
     """Load DataFrames into PostgreSQL."""
     from src.load.postgres import get_engine, load_dataframe
 
     engine = get_engine()
     total = 0
+
+    # Ensure referenced seasons exist before loading games
+    _ensure_seasons_postgres(engine, dataframes)
 
     # Dimension tables first, then fact tables
     load_order = ["dim_player", "dim_game", "fact_game_skater_stats", "fact_game_goalie_stats"]
@@ -183,6 +241,36 @@ def _load_postgres(dataframes: dict[str, pd.DataFrame]) -> int:
     return total
 
 
+def _ensure_seasons_snowflake(conn: Any, dataframes: dict[str, pd.DataFrame]) -> None:
+    """Auto-insert any missing seasons referenced by dim_game data (Snowflake)."""
+    if "dim_game" not in dataframes:
+        return
+
+    df = _prepare_for_table(dataframes["dim_game"], "dim_game")
+    if "season_id" not in df.columns:
+        return
+
+    season_ids = df["season_id"].dropna().unique().tolist()
+    if not season_ids:
+        return
+
+    cur = conn.cursor()
+    for sid in season_ids:
+        sid_str = str(sid)
+        start_year = int(sid_str[:4])
+        end_year = int(sid_str[4:])
+        cur.execute(
+            "MERGE INTO DIM_SEASON AS target "
+            "USING (SELECT %s AS SEASON_ID, %s AS START_YEAR, "
+            "%s AS END_YEAR, 'regular' AS SEASON_TYPE) AS source "
+            "ON target.SEASON_ID = source.SEASON_ID "
+            "WHEN NOT MATCHED THEN INSERT (SEASON_ID, START_YEAR, END_YEAR, SEASON_TYPE) "
+            "VALUES (source.SEASON_ID, source.START_YEAR, source.END_YEAR, source.SEASON_TYPE)",
+            (sid_str, start_year, end_year),
+        )
+    logger.info("Ensured seasons exist in Snowflake: %s", season_ids)
+
+
 def _load_snowflake(dataframes: dict[str, pd.DataFrame]) -> int:
     """Load DataFrames into Snowflake."""
     from src.load.snowflake import get_connection, load_dataframe
@@ -191,6 +279,9 @@ def _load_snowflake(dataframes: dict[str, pd.DataFrame]) -> int:
     total = 0
 
     try:
+        # Ensure referenced seasons exist before loading games
+        _ensure_seasons_snowflake(conn, dataframes)
+
         load_order = [
             "dim_player",
             "dim_game",
@@ -239,7 +330,7 @@ def _prepare_for_table(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
             "player_id", "game_id", "team_abbrev", "goals", "assists",
             "points", "shots", "hits", "blocked_shots", "pim",
             "toi_seconds", "plus_minus", "power_play_goals",
-            "power_play_points", "shorthanded_goals", "faceoff_pct",
+            "shorthanded_goals", "faceoff_pct",
         ]
         df = df[[c for c in columns if c in df.columns]]
 

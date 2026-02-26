@@ -8,12 +8,21 @@ Supports both Postgres and Snowflake backends via DB_BACKEND env var.
 
 import logging
 import os
+import sys
 from collections.abc import Callable
+from pathlib import Path
 
-import pandas as pd
-import streamlit as st
-from sqlalchemy import create_engine, text
-from sqlalchemy.engine import Engine
+# Streamlit adds the script's directory to sys.path, but other modules
+# import from the project root (e.g. "from src.models.slate import ...").
+# Ensure the project root is on sys.path so those imports resolve.
+_PROJECT_ROOT = str(Path(__file__).resolve().parents[2])
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+
+import pandas as pd  # noqa: E402
+import streamlit as st  # noqa: E402
+from sqlalchemy import create_engine, text  # noqa: E402
+from sqlalchemy.engine import Engine  # noqa: E402
 
 try:
     from dotenv import load_dotenv
@@ -356,13 +365,15 @@ def page_goalie_rankings(_engine: Engine, backend: str) -> None:
 # Main
 # ---------------------------------------------------------------------------
 
-PAGES: dict[str, Callable[[Engine, str], None]] = {
+DB_PAGES: dict[str, Callable[[Engine, str], None]] = {
     "Overview": page_overview,
     "Teams": page_teams,
     "Team Standings": page_standings,
     "Player Stats": page_player_stats,
     "Goalie Rankings": page_goalie_rankings,
 }
+
+ALL_PAGES = ["Slate Breakdown", *DB_PAGES.keys()]
 
 
 def main() -> None:
@@ -371,6 +382,14 @@ def main() -> None:
 
     backend = _get_backend()
     st.sidebar.markdown(f"**Backend:** `{backend}`")
+
+    page = st.sidebar.radio("Navigation", ALL_PAGES)
+
+    # Slate Breakdown doesn't need a DB connection
+    if page == "Slate Breakdown":
+        from src.dashboard.slate_breakdown import render_slate_breakdown
+        render_slate_breakdown()
+        return
 
     engine = get_engine(backend)
 
@@ -392,8 +411,7 @@ def main() -> None:
         st.error(f"Cannot connect to {backend}: {exc}\n\n{hint}")
         st.stop()
 
-    page = st.sidebar.radio("Navigation", list(PAGES.keys()))
-    PAGES[page](engine, backend)
+    DB_PAGES[page](engine, backend)
 
 
 main()
