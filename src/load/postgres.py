@@ -18,6 +18,18 @@ TABLE_KEYS: dict[str, list[str]] = {
     "fact_game_goalie_stats": ["player_id", "game_id"],
 }
 
+# Non-key columns per table, used to build ON CONFLICT DO UPDATE for dimension tables
+_TABLE_COLUMNS: dict[str, list[str]] = {
+    "dim_player": [
+        "first_name", "last_name", "position", "team_abbrev",
+        "jersey_number", "shoots_catches", "birth_date",
+    ],
+    "dim_game": [
+        "season_id", "game_type", "game_date", "home_team", "away_team",
+        "home_score", "away_score", "venue", "game_state",
+    ],
+}
+
 
 def _build_connection_string() -> str:
     """Build a PostgreSQL connection string from environment variables."""
@@ -34,8 +46,40 @@ def get_engine(connection_string: str | None = None) -> Engine:
     return create_engine(connection_string or _build_connection_string())
 
 
+def _upsert_dataframe(df: pd.DataFrame, table_name: str, engine: Engine) -> None:
+    """Upsert rows using INSERT ... ON CONFLICT DO UPDATE.
+
+    Used for dimension tables that are referenced by fact table FKs,
+    where delete-then-insert would violate constraints.
+    """
+    keys = TABLE_KEYS[table_name]
+    update_cols = _TABLE_COLUMNS[table_name]
+    all_cols = keys + update_cols
+
+    # Only include columns that are actually in the dataframe
+    all_cols = [c for c in all_cols if c in df.columns]
+    update_cols = [c for c in update_cols if c in df.columns]
+
+    placeholders = ", ".join(f":{c}" for c in all_cols)
+    col_list = ", ".join(all_cols)
+    conflict_keys = ", ".join(keys)
+    update_set = ", ".join(f"{c} = EXCLUDED.{c}" for c in update_cols)
+
+    sql = (
+        f"INSERT INTO {table_name} ({col_list}) VALUES ({placeholders}) "
+        f"ON CONFLICT ({conflict_keys}) DO UPDATE SET {update_set}"
+    )
+
+    records = df[all_cols].to_dict(orient="records")
+    with engine.connect() as conn:
+        conn.execute(text(sql), records)
+        conn.commit()
+
+
 def _delete_existing(engine: Engine, table_name: str, df: pd.DataFrame) -> int:
     """Delete rows from the target table that match incoming data on primary keys.
+
+    Used for fact tables (leaf tables with no FK dependents).
 
     Returns:
         Number of rows deleted.
@@ -91,18 +135,22 @@ def load_dataframe(
 ) -> int:
     """Load a DataFrame into a PostgreSQL table.
 
-    Deletes existing rows matching primary keys before inserting
-    to prevent duplicates on re-runs.
-
-    Args:
-        df: Data to load.
-        table_name: Target table name.
-        engine: SQLAlchemy engine.
-        if_exists: How to handle existing data ('append', 'replace', 'fail').
+    Dimension tables (dim_player, dim_game) use ON CONFLICT DO UPDATE to
+    avoid FK violations from fact tables. Fact tables use delete-then-insert.
 
     Returns:
-        Number of rows inserted.
+        Number of rows loaded.
     """
+    if table_name in _TABLE_COLUMNS:
+        # Dimension table: use proper upsert to avoid FK violations
+        rows_before = _count_rows(engine, table_name)
+        _upsert_dataframe(df, table_name, engine)
+        rows_after = _count_rows(engine, table_name)
+        rows_loaded = rows_after - rows_before
+        logger.info("Loaded %d rows into %s (upsert)", rows_loaded, table_name)
+        return rows_loaded
+
+    # Fact table: safe to delete-then-insert (no FK dependents)
     _delete_existing(engine, table_name, df)
 
     rows_before = _count_rows(engine, table_name)
