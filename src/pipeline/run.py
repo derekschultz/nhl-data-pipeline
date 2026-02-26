@@ -55,10 +55,14 @@ def run_extract(game_date: date) -> int:
         total_rows += len(games_df)
         logger.info("Wrote %d games to raw CSV", len(games_df))
 
-        # Fetch boxscores for completed games only
-        completed_games = [g for g in games if g.is_final]
+        # Fetch boxscores for completed regular-season/playoff games only
+        SUPPORTED_GAME_TYPES = {2, 3}  # regular season, playoffs
+        completed_games = [
+            g for g in games
+            if g.is_final and g.game_type in SUPPORTED_GAME_TYPES
+        ]
         logger.info(
-            "%d of %d games are final, fetching boxscores",
+            "%d of %d games are final regular-season/playoff, fetching boxscores",
             len(completed_games),
             len(games),
         )
