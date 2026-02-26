@@ -1,12 +1,18 @@
 """Main pipeline runner. Ties together extract, transform, and load stages."""
 
+from __future__ import annotations
+
 import argparse
 import logging
 from dataclasses import asdict
 from datetime import date, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pandas as pd
+
+if TYPE_CHECKING:
+    from sqlalchemy.engine import Engine
 
 logging.basicConfig(
     level=logging.INFO,
@@ -51,11 +57,15 @@ def run_extract(game_date: date) -> int:
         all_games = parse_games(scores)
 
         # Keep only regular-season and playoff games
-        SUPPORTED_GAME_TYPES = {2, 3}
-        games = [g for g in all_games if g.game_type in SUPPORTED_GAME_TYPES]
+        supported_game_types = {2, 3}
+        games = [g for g in all_games if g.game_type in supported_game_types]
 
         if not games:
-            logger.info("No supported games found for %s (%d total skipped)", game_date, len(all_games))
+            skipped = len(all_games)
+            logger.info(
+                "No supported games found for %s (%d total skipped)",
+                game_date, skipped,
+            )
             return 0
 
         # Write games CSV
@@ -177,7 +187,7 @@ def run_load(game_date: date, backend: str = "postgres") -> int:
     return total_rows
 
 
-def _ensure_seasons_postgres(engine: "Engine", dataframes: dict[str, pd.DataFrame]) -> None:
+def _ensure_seasons_postgres(engine: Engine, dataframes: dict[str, pd.DataFrame]) -> None:
     """Auto-insert any missing seasons referenced by dim_game data."""
     from sqlalchemy import text
 
@@ -251,7 +261,8 @@ def _ensure_seasons_snowflake(conn: object, dataframes: dict[str, pd.DataFrame])
         end_year = int(sid_str[4:])
         cur.execute(
             "MERGE INTO DIM_SEASON AS target "
-            "USING (SELECT %s AS SEASON_ID, %s AS START_YEAR, %s AS END_YEAR, 'regular' AS SEASON_TYPE) AS source "
+            "USING (SELECT %s AS SEASON_ID, %s AS START_YEAR, "
+            "%s AS END_YEAR, 'regular' AS SEASON_TYPE) AS source "
             "ON target.SEASON_ID = source.SEASON_ID "
             "WHEN NOT MATCHED THEN INSERT (SEASON_ID, START_YEAR, END_YEAR, SEASON_TYPE) "
             "VALUES (source.SEASON_ID, source.START_YEAR, source.END_YEAR, source.SEASON_TYPE)",
