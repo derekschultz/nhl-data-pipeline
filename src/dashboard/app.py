@@ -378,7 +378,7 @@ def main() -> None:
 
     # Slate Breakdown doesn't need a DB connection
     if page == "Slate Breakdown":
-        from src.dashboard.slate_breakdown import render_slate_breakdown
+        from slate_breakdown import render_slate_breakdown  # type: ignore[import-not-found]
         render_slate_breakdown()
         return
 
