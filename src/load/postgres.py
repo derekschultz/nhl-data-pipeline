@@ -70,8 +70,10 @@ def _upsert_dataframe(df: pd.DataFrame, table_name: str, engine: Engine) -> None
         f"ON CONFLICT ({conflict_keys}) DO UPDATE SET {update_set}"
     )
 
-    # Convert NaN to None so psycopg2 sends NULL instead of float NaN
-    records = df[all_cols].where(df[all_cols].notna(), None).to_dict(orient="records")
+    # Convert NaN to None so psycopg2 sends NULL instead of float NaN.
+    # Must cast to object first — pandas silently converts None back to NaN in numeric columns.
+    clean = df[all_cols].astype(object).where(df[all_cols].notna(), None)
+    records = clean.to_dict(orient="records")
     with engine.connect() as conn:
         conn.execute(text(sql), records)
         conn.commit()
