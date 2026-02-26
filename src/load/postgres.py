@@ -130,6 +130,29 @@ def _delete_existing(engine: Engine, table_name: str, df: pd.DataFrame) -> int:
     return deleted
 
 
+def _get_table_columns(engine: Engine, table_name: str) -> list[str]:
+    """Get actual column names from the database table."""
+    with engine.connect() as conn:
+        result = conn.execute(
+            text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = :tbl ORDER BY ordinal_position"
+            ),
+            {"tbl": table_name},
+        )
+        return [row[0] for row in result]
+
+
+def _filter_to_db_columns(df: pd.DataFrame, engine: Engine, table_name: str) -> pd.DataFrame:
+    """Drop any DataFrame columns that don't exist in the actual DB table."""
+    db_cols = _get_table_columns(engine, table_name)
+    valid = [c for c in df.columns if c in db_cols]
+    dropped = set(df.columns) - set(valid)
+    if dropped:
+        logger.debug("Dropping columns not in %s: %s", table_name, dropped)
+    return df[valid]
+
+
 def load_dataframe(
     df: pd.DataFrame,
     table_name: str,
@@ -140,10 +163,13 @@ def load_dataframe(
 
     Dimension tables (dim_player, dim_game) use ON CONFLICT DO UPDATE to
     avoid FK violations from fact tables. Fact tables use delete-then-insert.
+    Columns are filtered to match the actual DB schema to avoid drift issues.
 
     Returns:
         Number of rows loaded.
     """
+    df = _filter_to_db_columns(df, engine, table_name)
+
     if table_name in _TABLE_COLUMNS:
         # Dimension table: use proper upsert to avoid FK violations
         rows_before = _count_rows(engine, table_name)
