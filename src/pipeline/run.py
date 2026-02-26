@@ -306,7 +306,7 @@ def _prepare_for_table(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
             "player_id", "game_id", "team_abbrev", "goals", "assists",
             "points", "shots", "hits", "blocked_shots", "pim",
             "toi_seconds", "plus_minus", "power_play_goals",
-            "power_play_points", "shorthanded_goals", "faceoff_pct",
+            "shorthanded_goals", "faceoff_pct",
         ]
         df = df[[c for c in columns if c in df.columns]]
 
